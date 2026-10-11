@@ -194,7 +194,7 @@ $pendingRoot = Get-FullPath ([string]$settings.pending_root)
 $primaryRoot = Get-FullPath ([string]$settings.primary_archive_root)
 $settlementRoot = Get-FullPath ([string]$settings.settlement_archive_root)
 $allowedCarriers = @($settings.allowed_carriers | ForEach-Object { [string]$_ })
-$year = [string]$settings.default_year
+# Archive year is derived from each verified arrival date, never a default year.
 $settlementMarker = [string]$settings.settlement_marker
 
 $preflight = foreach ($row in $batch) {
@@ -226,9 +226,11 @@ $preflight = foreach ($row in $batch) {
     if (-not (Test-VerifiedStatus $readbackStatus)) { $errors.Add('Readback status is not verified') }
     if (-not (Test-SavedStatus $saveStatus)) { $errors.Add('Save status is not saved') }
     if (-not (Test-LedgerSaved (Get-ManifestValue $row 'ledger_saved'))) { $errors.Add('Ledger is not marked saved') }
-    if ($saveMethod -notin @('native', 'ui', 'existing')) { $errors.Add('Save method must be native, ui, or existing') }
+    if ($saveMethod -notin @('native', 'ui', 'existing', 'offline')) { $errors.Add('Save method must be native, ui, existing, or offline') }
     $ledgerHash = Get-ManifestValue $row 'ledger_sha256'
-    if ($saveMethod -eq 'existing' -and $ledgerHash -notmatch '^[A-Fa-f0-9]{64}$') { $errors.Add('Existing saved records require a fresh disk ledger SHA256') }
+    if ($ledgerHash -notmatch '^[A-Fa-f0-9]{64}$') { $errors.Add('Every archive requires a fresh verified disk ledger SHA256') }
+    if ($ledgerFile -and -not [IO.Path]::IsPathRooted($ledgerFile)) { $ledgerFile = Join-Path ([string]$settings.ledger_root) $ledgerFile }
+    if ($ledgerFile -and -not (Test-PathInsideRoot $ledgerFile ([string]$settings.ledger_root))) { $errors.Add('Transport ledger outside ledger root') }
     if ($ledgerHash) {
         if (-not (Test-Path -LiteralPath $ledgerFile -PathType Leaf)) { $errors.Add('Ledger file does not exist') }
         elseif ((Get-Sha256 $ledgerFile) -ne $ledgerHash) { $errors.Add('Ledger changed since disk verification; reverify first') }
@@ -251,6 +253,7 @@ $preflight = foreach ($row in $batch) {
 
     $source = if ([System.IO.Path]::IsPathRooted($sourceName)) { Get-FullPath $sourceName } else { Get-FullPath (Join-Path $pendingRoot $sourceName) }
     if (-not (Test-PathInsideRoot -Path $source -Root $pendingRoot)) { $errors.Add('Source is outside pending root') }
+    if ($settings.factory_pending_root -and (Test-PathInsideRoot $source ([string]$settings.factory_pending_root))) { $errors.Add('Factory notes must use archive_factory_notes.py') }
     $sourceExists = Test-Path -LiteralPath $source -PathType Leaf
     $expectedSourceHash = Get-ManifestValue $row 'source_sha256'
     if (-not $sourceExists -and $expectedSourceHash -notmatch '^[A-Fa-f0-9]{64}$') { $errors.Add('Missing source requires a previously recorded SHA256 and two matching archives') }
@@ -297,8 +300,8 @@ $preflight = foreach ($row in $batch) {
         if (-not (Test-Path -LiteralPath $primaryCarrierDir -PathType Container)) { $errors.Add('Primary carrier directory does not exist') }
         if (-not (Test-Path -LiteralPath $settlementProjectDir -PathType Container)) { $errors.Add('Settlement project directory does not exist') }
 
-        if (Test-Path -LiteralPath (Join-Path $settlementProjectDir $year) -PathType Container) {
-            $settlementTargetDir = Get-FullPath (Join-Path $settlementProjectDir $year)
+        if ($arrival) {
+            $settlementTargetDir = Get-FullPath (Join-Path $settlementProjectDir ($arrival.Year.ToString()))
         } else {
             $settlementTargetDir = $settlementProjectDir
         }
@@ -379,6 +382,10 @@ foreach ($item in $preflight) {
         if (Test-Path -LiteralPath $item.Source -PathType Leaf) {
             if ((Get-Sha256 $item.Source) -ne $item.SourceHash) { throw 'Source changed after preflight' }
         } elseif (-not $targets.PrimaryExists -or -not $targets.SettlementExists) { throw 'Source absent before dual archive completion' }
+        $yearDir = Split-Path -Parent $targets.Settlement
+        if (-not (Test-PathInsideRoot $yearDir $settlementRoot)) { throw 'Year directory outside settlement root' }
+        if (-not (Test-Path -LiteralPath (Split-Path -Parent $yearDir) -PathType Container)) { throw 'Confirmed project directory disappeared; do not recreate it' }
+        if (-not (Test-Path -LiteralPath $yearDir -PathType Container)) { [IO.Directory]::CreateDirectory($yearDir) | Out-Null }
         if (-not $targets.PrimaryExists) {
             [System.IO.File]::Copy($item.Source, $targets.Primary, $false)
             $item.PrimaryStatus = 'copied'

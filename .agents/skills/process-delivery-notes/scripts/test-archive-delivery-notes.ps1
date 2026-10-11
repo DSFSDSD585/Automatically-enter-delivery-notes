@@ -12,9 +12,20 @@ function Write-Utf8NoBom {
 
 function Invoke-ArchiveChild {
     param([string[]]$Arguments)
+    # Every test supplies a real, freshly hashed stand-in ledger; the archiver must not trust flags alone.
+    $manifestArg = $Arguments[[Array]::IndexOf($Arguments, '-ManifestPath') + 1]
+    $fixtureRows = @(Import-Csv -LiteralPath $manifestArg)
+    $fixtureSettings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+    New-Item -ItemType Directory -Path $fixtureSettings.ledger_root -Force | Out-Null
+    foreach ($fixtureRow in $fixtureRows) {
+        if (-not [IO.Path]::IsPathRooted($fixtureRow.ledger_file)) { $fixtureRow.ledger_file = Join-Path $fixtureSettings.ledger_root $fixtureRow.ledger_file }
+        if (-not (Test-Path -LiteralPath $fixtureRow.ledger_file)) { Write-Utf8NoBom $fixtureRow.ledger_file 'saved ledger fixture' }
+        if (-not $fixtureRow.PSObject.Properties['ledger_sha256']) { $fixtureRow | Add-Member -NotePropertyName ledger_sha256 -NotePropertyValue (Get-TestSha256 $fixtureRow.ledger_file) }
+    }
+    $fixtureRows | Export-Csv -LiteralPath $manifestArg -NoTypeInformation -Encoding UTF8
     $allArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath) + $Arguments
     $currentPowerShell = (Get-Process -Id $PID).Path
-    $process = Start-Process -FilePath $currentPowerShell -ArgumentList $allArguments -Wait -PassThru -NoNewWindow
+    $process = Start-Process -FilePath $currentPowerShell -ArgumentList $allArguments -Wait -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $root 'child.stdout') -RedirectStandardError (Join-Path $root 'child.stderr')
     return $process.ExitCode
 }
 
@@ -182,7 +193,29 @@ try {
     $exitCode = Invoke-ArchiveChild @('-ManifestPath', $pngManifest, '-SettingsPath', $settingsPath, '-CarrierRulesPath', $rulesPath, '-ProjectMapPath', $mapPath, '-ReportPath', $pngReport, '-Execute')
     Assert-True ($exitCode -eq 2) 'same number across formats must require review'
     Assert-True (Test-Path -LiteralPath (Join-Path $pending 'ten.png')) 'cross-format conflict source retained'
-    Write-Host 'All archive workflow tests passed, including native PNG, invalid PNG and cross-format collision.'
+    $future = Import-Csv $manifest1
+    $future.source_file = 'future.jpg'; $future.delivery_no = 'ABC-GS-00020'; $future.arrival_date = '2027-01-03'
+    [IO.File]::WriteAllBytes((Join-Path $pending 'future.jpg'), [byte[]](40,41,42))
+    $futureManifest = Join-Path $root 'future.csv'; $futureReport = Join-Path $root 'future-result.csv'
+    $future | Export-Csv -LiteralPath $futureManifest -NoTypeInformation -Encoding UTF8
+    $exitCode = Invoke-ArchiveChild @('-ManifestPath', $futureManifest, '-SettingsPath', $settingsPath, '-CarrierRulesPath', $rulesPath, '-ProjectMapPath', $mapPath, '-ReportPath', $futureReport, '-Execute')
+    Assert-True ($exitCode -eq 0) 'new arrival year should create only its year subfolder'
+    Assert-True ((Import-Csv $futureReport).settlement_target -match '2027[\\]0103') 'arrival year must override configured default year'
+    $future.source_file = 'missing-hash.jpg'; $future.delivery_no = 'ABC-GS-00021'; $future.ledger_sha256 = ''
+    [IO.File]::WriteAllBytes((Join-Path $pending 'missing-hash.jpg'), [byte[]](43,44,45))
+    $future | Export-Csv -LiteralPath $futureManifest -NoTypeInformation -Encoding UTF8
+    $exitCode = Invoke-ArchiveChild @('-ManifestPath', $futureManifest, '-SettingsPath', $settingsPath, '-CarrierRulesPath', $rulesPath, '-ProjectMapPath', $mapPath, '-ReportPath', $futureReport, '-Execute')
+    Assert-True ($exitCode -eq 2) 'all save methods must require fresh ledger hash'
+    Assert-True (Test-Path -LiteralPath (Join-Path $pending 'missing-hash.jpg')) 'missing hash retains source'
+    $future.source_file = 'offline.jpg'; $future.delivery_no = 'ABC-GS-00022'; $future.ledger_sha256 = Get-TestSha256 $future.ledger_file
+    $future.save_method = 'offline'; $future.close_status = 'not_attempted'; $future.close_method = 'none'; $future.close_error = 'Offline handles released; Excel not opened'
+    [IO.File]::WriteAllBytes((Join-Path $pending 'offline.jpg'), [byte[]](46,47,48))
+    $future | Export-Csv -LiteralPath $futureManifest -NoTypeInformation -Encoding UTF8
+    $exitCode = Invoke-ArchiveChild @('-ManifestPath', $futureManifest, '-SettingsPath', $settingsPath, '-CarrierRulesPath', $rulesPath, '-ProjectMapPath', $mapPath, '-ReportPath', $futureReport, '-Execute')
+    Assert-True ($exitCode -eq 0) 'verified offline save must support ordinary dual archive'
+    Assert-True ((Import-Csv $futureReport).save_method -eq 'offline') 'offline audit must not masquerade as an Excel save'
+    Write-Host 'All 15 archive scenarios passed, including year selection and mandatory saved-ledger hashes.'
+
 } finally {
     if (Test-Path -LiteralPath $root) {
         $resolvedRoot = [IO.Path]::GetFullPath($root)

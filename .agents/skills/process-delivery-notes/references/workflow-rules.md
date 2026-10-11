@@ -1,8 +1,10 @@
-# Delivery-note workflow rules
+# Self-pickup transport-ledger workflow rules
+
+本参考仅用于自提运输录入；厂发及配送同步读取 distribution-workflow.md。共用备份、保持行高列宽和已确认更正规则见SKILL.md。
 
 ## Configured locations
 
-Read local `assets/settings.json` for the pending, ledger, primary archive and settlement archive roots. Copy `assets/settings.example.json` and fill in actual local paths before use. Local configuration and real business files are excluded from Git.
+Read local `assets/settings.json` for pending, factory-pending, transport-ledger, distribution-ledger, procurement and archive paths. Start from `assets/settings.example.json`. Real paths, project maps and business files stay outside Git.
 
 ## Extraction and ledger rules
 
@@ -25,16 +27,16 @@ Read local `assets/settings.json` for the pending, ledger, primary archive and s
 - Process multi-carrier batches one ledger at a time. Save, verify, and close the current ledger before opening the next ledger.
 - Prefer a connected Excel save command. When none is advertised, use the controlled Excel UI fallback described in `save-close-workflow.md`; this is the user's standing authorization for target transport ledgers only.
 - Save only after live read-back verification succeeds. Verify the file modification time and re-read the written rows from disk before marking the ledger saved. If writing, verification, or saving fails, do not archive or delete the pending image.
-- After a verified save, close only the exact target workbook. A close failure must be reported but does not block paired archiving or pending-image cleanup when the saved file passed disk verification.
+- After a verified live save, close only the exact target workbook; offline work must release file handles and report that no Excel workbook was opened. A close failure must be reported but does not block paired archiving or pending-image cleanup when the saved file passed disk verification.
 - Do not use COM, VBA/macros, Save As, overwrite prompts, or changes to Excel security settings as save/close fallbacks.
 - Reject text containing Unicode replacement code point `U+FFFD` or evident mojibake before saving.
-- Stop on read-only/occupied Nutstore workbooks and on duplicate delivery numbers found in different carrier ledgers.
+- Never overwrite an occupied Nutstore workbook. For a DOS read-only attribute on an unoccupied file, use the explicitly authorized offline route in save-close-workflow.md. Duplicate numbers across carrier ledgers require physical-note reconciliation.
 
 ## Project rules
 
 - Use the explicit project map when names differ.
 - If the same project directory exists under both archive roots, an exact-name match is allowed without a map row.
-- If the settlement project has a `2026` subfolder, save there. Otherwise save in the settlement project root.
+- Save in the actual arrival year subfolder of the confirmed settlement project. If only that year folder is missing, create it after preflight; never fall back to the project root.
 - Do not create a missing settlement project directory. Ask for the mapping first.
 - A project map marked `pending` may contain a user-confirmed ledger worksheet but unresolved archive directories. This blocks automatic archiving, not authorized entry of clear fields into that confirmed worksheet. Never infer missing archive directories from the project name.
 - Do not create a new mapping for `轻轨2标3工区`; the project is closed.
@@ -46,9 +48,9 @@ Read local `assets/settings.json` for the pending, ledger, primary archive and s
 - Primary filename: `<delivery_no>.jpg` for JPEG, `<delivery_no>.png` for original PNG.
 - Primary directory: `<primary_root>\<archive_project>\<carrier>`.
 - Settlement filename: `<arrival MMdd>已录<delivery_no>.jpg` or `.png`, matching the original image format.
-- Settlement directory: the mapped project's `2026` subfolder when present, otherwise its root.
+- Settlement directory: the mapped project's actual arrival-year subfolder.
 - Preflight both destinations before copying either file.
-- Require both destination directories to exist before copying. Do not create a missing project or carrier directory during archive execution.
+- Require the confirmed project and primary carrier directories to exist. Only the arrival-year subdirectory may be created after preflight; do not invent a project or carrier directory.
 - Never silently overwrite. A reviewed replacement photograph of the SAME physical note uses the backup/verification procedure in `recovery-workflow.md`. For DIFFERENT physical notes with the same printed number, assign the numeric suffix in the ledger first; include that suffix in manifest `delivery_no` and both archive filenames. For multiple detail rows belonging to one physical note, retain one identical number across all rows and archive the note once.
 - Delete the pending source only after source, primary copy, and settlement copy hashes agree.
 - Persist each item's archive status, resolved targets, SHA-256 values, and error reason to the batch result CSV so interrupted batches can resume safely.

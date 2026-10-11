@@ -1,12 +1,23 @@
-# Transport-ledger save and close workflow
+# Target-ledger save, verification and release workflow
 
-Use this workflow only for transport ledgers explicitly selected during delivery-note processing. It records the user's standing authorization to save and close that target workbook without asking again for each batch. It does not authorize closing unrelated workbooks or accepting conflict, overwrite, authentication, recovery, or security prompts.
+Use this workflow only for transport or distribution ledgers explicitly selected during delivery-note processing. It records the user's standing authorization to save and close that target workbook without asking again for each batch. It does not authorize closing unrelated workbooks or accepting conflict, overwrite, authentication, recovery, or security prompts.
 
-## Check open/save/close capability before entry
+
+## Choose the available route
+
+Live workbook sessions use the live state machine below. For file-based work use the available spreadsheet file-authoring skill. The user has authorized offline saving for these delivery/transport workflows; do not request repeated permission merely because a connected Save command is unavailable. A skill update/test alone does not authorize production edits.
+
+For offline work: create hash-verified backups first; check the exact target for an Excel lock and actual exclusive access. Never write over an open/occupied workbook or kill Excel. Author a staged copy, verify only intended cells changed, preserve all original row heights, widths, formulas, comments and package features, and independently check dependent calculations. Immediately before commit re-read the original and require its hash to match the reviewed backup; otherwise rebuild from the new current file. Commit under exclusive access with recovery to the verified original on failure, flush and close every handle, then re-read saved bytes/cells. Temporarily clearing the DOS read-only attribute is permitted only for an unoccupied authorized target, restoring it in a finally block; do not modify ACLs or Excel security.
+
+Never use wholesale openpyxl/third-party re-save if it drops unsupported workbook features. A staged artifact export can be merged only for reviewed changed cells/styles/caches, with original formula text and unrelated package parts verified unchanged. Handle XML namespaces, inline/shared strings and shared-formula translation; do not use fixed sheet numbers. If reliable recalculation is unavailable, retain the stage and report unverified formulas instead of marking saved. Do not hide a formula error with a blank or fabricated cache.
+
+Offline method is `offline`; close audit is `not_attempted/none` with “offline handles released; Excel not opened”. An empty Excel window is not evidence that a target remains open. Local disk verification is not cloud-upload verification.
+
+## Check open/save/close capability before entry (live route only)
 
 Before editing the first ledger in a batch, verify both the connected Excel tools and the controlled UI fallback. Missing standalone Computer Use tools alone do not establish that UI control is unavailable.
 
-On this Windows installation, use the current available Computer Use skill and its bundled guidance, API, and confirmation references before importing `@oai/sky` through `node_repl`. Do not assume an old package documentation path or API remains valid. Test the documented app discovery and a fresh target-window snapshot before claiming the UI route works. Do not launch a disabled legacy server, change security settings, or substitute raw input injection. If the supported runtime is absent or its documented call fails after one bounded recovery, report the exact failure and leave originals untouched.
+On this Windows installation, use the current available Computer Use skill and its bundled guidance, API, and confirmation references before importing `@oai/sky` through `node_repl`. Do not assume an old package documentation path or API remains valid. Test the documented app discovery and a fresh target-window snapshot before claiming the UI route works. Do not launch a disabled legacy server, change security settings, or substitute raw input injection. If the supported runtime is absent or its documented call fails after one bounded recovery, report that limitation and use the authorized offline route only if the target is unoccupied. Never bypass a disabled native UI API.
 
 Opening the next authorized transport workbook is part of this workflow: use the documented Computer Use interface to launch Excel if needed and open the exact known path through Excel. Confirm the title, editable grid, add-in pane, sign-in, and new connected session before entering data. Never ask the user to open a workbook merely because the connected document command list has no open command.
 

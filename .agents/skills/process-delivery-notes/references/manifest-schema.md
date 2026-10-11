@@ -18,12 +18,12 @@ Use one row per source image. Keep the same row through recognition, ledger entr
 | `readback_status` | `verified` |
 | `save_status` | `saved` |
 | `ledger_saved` | `true` |
-| `save_method` | `native`, `ui`, or `existing` for fresh read-only verification of already-saved records |
+| `save_method` | `native`, `ui`, `offline`, or `existing` for fresh read-only verification of already-saved records |
 | `saved_mtime` | ISO 8601 modification time captured after disk verification |
 | `close_status` | `closed`, `failed`, or `not_attempted` |
 | `close_method` | `native`, `ui`, or `none` |
 | `close_error` | Blank when closed; concise reason when failed or not attempted |
-| `ledger_sha256` | Fresh verified disk workbook hash; required for `existing`, recommended for every new batch |
+| `ledger_sha256` | Fresh verified disk workbook hash; required for every entry, including native/UI/offline saves and existing records |
 | `source_sha256` | Reviewed source hash; required for replay after source cleanup |
 | `missing_fields` | Blank or vehicle/vehicle_plate/车牌/车牌号 only; blank plates are globally authorized |
 
@@ -43,3 +43,5 @@ Before archive execution, verify that every detail row for the physical note has
 - `cleanup_status`: `pending`, `deleted`, or `already_absent`.
 
 Use `-ReportPath` for every dry run and execution, distinct from the input manifest. The CSV and adjacent `.journal.jsonl` are the resumable audit trail; do not edit hash fields manually. `existing` requires a new photo-to-disk-row review and workbook hash, not a stale saved flag.
+
+`offline`表示已授权的离线修改、保存及磁盘逐格核验；没有打开工作簿时close_status=not_attempted、close_method=none，close_error说明离线保存且句柄已释放，不伪造Excel已关闭。自提归档年份取arrival_date年份；已确认项目下允许创建缺失年份目录，不再退回项目根目录。厂发使用独立JSON归档脚本。

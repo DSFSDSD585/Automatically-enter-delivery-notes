@@ -5,5 +5,13 @@
   "settlement_archive_root": "D:/DeliveryNotes/settlement",
   "settlement_marker": "已录",
   "default_year": 2026,
-  "allowed_carriers": ["顾氏", "伟豪", "享运", "顺赢"]
+  "allowed_carriers": [
+    "顾氏",
+    "伟豪",
+    "享运",
+    "顺赢"
+  ],
+  "factory_pending_root": "D:/DeliveryNotes/pending/factory",
+  "distribution_ledger": "D:/DeliveryNotes/settlement/distribution-2026.xlsx",
+  "procurement_root": "D:/DeliveryNotes/procurement/2026"
 }

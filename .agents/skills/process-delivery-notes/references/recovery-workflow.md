@@ -1,5 +1,7 @@
 # Recovery and blank-plate policy
 
+The ledger scanning and dual-archive CSV commands below are for self-pickup notes. Factory notes use the distribution workflow's current-workbook readback and `archive_factory_notes.py`; they require a verified processing backup plus the project/year settlement copy, not a fabricated carrier archive. Both modes use the same full physical-note identity and no-duplicate rules.
+
 User authorization: every blank vehicle/license plate is allowed for save and dual archive. Keep the field empty. Do not erase an existing reliable plate and do not waive missing delivery identity, project, arrival date, material quantities, or conflicting fields.
 
 ## Reconcile before writing

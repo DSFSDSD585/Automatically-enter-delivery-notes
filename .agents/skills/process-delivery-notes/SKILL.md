@@ -1,51 +1,43 @@
 ---
 name: process-delivery-notes
-description: Process photographed steel delivery notes from the Nutstore pending folder through carrier and project resolution, live Microsoft Excel ledger entry, verification, save, dual archiving to the processed-delivery and settlement directories, SHA-256 validation, and safe pending-file cleanup. Use for new delivery-note batches, skipped-number backfills, carrier-rule updates, project-alias maintenance, or auditing delivery-note processing results.
+description: Process steel delivery notes from Nutstore, enter self-pickup transport ledgers or factory-direct notes, synchronize transport records to the 2026 distribution ledger without duplicates, reconcile purchase and inbound records, verify saves, and archive originals by project and year. Use for delivery batches, backfills, corrections, reconciliation, and interrupted processing.
 ---
 
 # Process Delivery Notes
 
-Process each clear delivery note as one resumable transaction: identify it, preflight the ledger destination, write and read it back, confirm the workbook is saved, then create and validate both archive copies before removing the pending source.
+按单据类型选择流程；以保存后重新读取的实际内容为完成依据。先备份，先查重，逐项留存进度，重试只补未完成步骤。技能更新或测试不等于授权处理正式业务文件。
 
-## Required resources
+## 流程入口
 
-- Read [references/workflow-rules.md](references/workflow-rules.md) before processing a batch.
-- Read [references/project-map.csv](references/project-map.csv) when project names differ across the ledger, processed archive, and settlement archive.
-- Read [references/carrier-rules.json](references/carrier-rules.json) when classifying or changing carrier rules.
-- Read [references/manifest-schema.md](references/manifest-schema.md) before creating or resuming a batch manifest.
-- Read [references/save-close-workflow.md](references/save-close-workflow.md) whenever a ledger will be saved or closed automatically.
-- Use [assets/batch-manifest-template.csv](assets/batch-manifest-template.csv) to prepare the verified batch.
-- Use [scripts/archive-delivery-notes.ps1](scripts/archive-delivery-notes.ps1) only after every listed ledger is saved.
-- Read [references/recovery-workflow.md](references/recovery-workflow.md) when pending contains previously entered/archived notes, reuploads, or version conflicts.
-- Use `scripts/inventory-pending.py --history-root <workspace> --report <new-batch>/inventory.json` for a new stable inventory. Do not overwrite the original inventory after cleanup; a new reconciliation report must retain original source hashes/indexes used by operation plans.
+| 请求 | 必读及范围 |
+|---|---|
+| 自提新单 | [运输规则](references/workflow-rules.md)、[项目映射](references/project-map.csv)、[承运商规则](references/carrier-rules.json)。运输台账保存核验后接配送同步。 |
+| 厂发新单 | [配送录入及同步](references/distribution-workflow.md)。直接匹配入库并录总览，不虚构运输台账或承运商。 |
+| 已有运输记录同步配送 | [配送录入及同步](references/distribution-workflow.md)。按用户年份/范围；全部2026年包括四本运输台账及旧配送账中的2026记录核查。 |
+| 重传、漏归档、重复、更正 | [恢复规则](references/recovery-workflow.md)及对应入口。冲突项待核实，不重复补录。 |
 
-## Workflow
+所有保存操作读取 [保存与释放文件](references/save-close-workflow.md)。自提双归档读取 [CSV清单](references/manifest-schema.md)；厂发使用配送参考中的JSON清单。
 
-1. Inventory pending images by SHA-256 and reconcile saved ledgers plus both archives BEFORE new entry. Resume saved-but-unarchived and archived-but-not-cleaned notes first. Inspect every image and extract delivery number, project, planned date, arrival date, vehicle, material lines, delivery-note weight, pieces, and remarks. Blank vehicle plates are globally allowed: preserve blanks, never guess, and do not block saving or archiving solely for that reason. Other missing identity/date/material fields still require partial-entry or confirmation.
-2. Resolve the carrier from the numbering rules, never from the vehicle. Search all four ledgers when a rule does not resolve uniquely.
-3. Resolve the project through the project map. Do not guess similar project names or create a missing settlement project folder.
-4. Use the live Microsoft Excel workflow for ledger edits. Confirm the workbook is editable, preserve skipped-number placeholder rows, and distinguish duplicate physical notes from multiple detail lines. If different physical delivery notes carry the same printed number, keep the first as the base number and assign later notes `-1`, `-2`, and so on in the ledger. If one physical note has multiple material detail lines, repeat the same ledger number on every detail line without adding a suffix. Insert enough rows for all material lines and format new cells as Songti 11 pt. Before every write, fetch the current tool schema and use its exact parameter names. In Office.js, copy formulas or styling with `destination.copyFrom(source, copyType)`; never call `source.copyTo(destination)`. Read the destination before writing and stop if it contains an unrelated record.
-5. Treat a successful write response as provisional. Read the written range back and verify identifiers, dates, weight, pieces, formulas, remarks, row order, duplicate numbers, and text encoding. Set `readback_status=verified` only when the actual cells match; otherwise retry using the current schema or leave the item blocked.
-6. Save only after read-back verification. Group the batch by ledger and finish one workbook before opening the next. Prefer an advertised connected Excel save command; when none exists, use the narrowly scoped UI fallback in the save/close reference. Verify the on-disk modification time and re-read the target rows from the saved file before setting `save_status=saved` and `ledger_saved=true`.
-7. After disk save verification, close only the exact target workbook. Prefer an advertised connected close command; otherwise use the same controlled UI fallback. A close failure does not invalidate a verified save and does not block archiving, but it must be recorded and reported. Never use COM, macros, or changes to Excel security settings.
-8. Run the archive script without `-Execute`. Resolve every blocked item before continuing.
-9. Run the same command with `-Execute`. The script must verify both copies by SHA-256 before deleting the pending source.
-10. Persist per-step journal events before cleanup and after each note, plus the final result CSV. Report separately new copies, reused copies, verified pairs, deleted sources, skipped/conflicting items and pending count. A resumed note may need only one new copy; compare verified paired-note totals, not new-copy counts.
+## 共用约束
 
-Current user overrides: archive PNG in its original format with `.png` in both destinations; never convert or merely rename bytes. Checked new material rows use Songti 11 pt black text. Inventory history must include all carrier-specific `*-result.csv` and `*-manifest.csv` files under prior `batch-*` directories, not only `archive-result.csv`. Historical matches are candidates requiring fresh disk and archive verification, never automatic deletion authority.
+1. 每批修改前备份将改的工作簿及待处理原单，记录路径、时间、SHA-256并核验；使用独立批次目录，不能覆盖前次备份。
+2. 完整保留编号前导零、位数及后缀。同一物理单多材料/多入库编号共用编号；不同物理单确实重号才分配`-1/-2`。不同图片哈希不等于新单。不得全局替换O/0、I/1或删零。
+3. 项目和销售公司用已核实对应关系，不靠相似名字/同重量推断。厂发销售简称与自提承运商规则分开。
+4. 保持原行高、列宽、隐藏状态、公式、格式及已有备注；不全表自动适应。必要新行继承适合模板，不改变原行。运输新材料行宋体11磅黑字；更正值红字、本行追加修改内容，不写更正来源。原红底保留可读文字，备注标红。
+5. 写前重读原值并比较文件哈希，若用户/同步客户端已改文件，重新核对。写后核验关联计算，保存后从磁盘重读。命令成功或修改时间变化不等于完成。
+6. 原图按实际到货年份存对应项目。自提运输和配送双归档；厂发配送归档加处理前备份。缺项目映射先核实；已确认项目下缺年份目录可以创建，不能退回项目根目录。
+7. 记录`recognized → matched → written → disk_verified → archived → cleaned`及每步行号/哈希。重试仅补缺步骤。同步历史运输记录不删除或搬动原归档。
+8. 空车牌允许，其他缺日期/身份/数量字段仍待核；用户说待核实的保持待核。退货、取消、合计和占位号不算新配送。
 
-## Archive commands
+## 工具及边界
 
-Dry run:
+- `scripts/inventory-pending.py --history-root <workspace> --report <new-batch>/inventory.json`：自提稳定清单；厂发加`--mode factory`。历史命中只是候选。
+- `scripts/distribution_checks.py --input <reviewed-snapshot.json> --report <new-plan.json>`：已规范化原单/运输、入库、已有配送的去重、分配、数量及磅差检查。只输出计划，不识图、不写台账、不替代采购复核。格式见配送参考。
+- `scripts/archive-delivery-notes.ps1 -ManifestPath <batch.csv> -ReportPath <new-result.csv>`：自提双归档预检，通过后加`-Execute`。提供当前磁盘工作簿哈希。
+- `scripts/archive_factory_notes.py --manifest <factory.json> --report <new-result.json>`：厂发归档预检，通过后加`--execute`，核验保存后的配送实际行。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/archive-delivery-notes.ps1 -ManifestPath <batch.csv> -ReportPath <batch-result.csv>
-```
+逐工作簿完成写入、保存、磁盘核验和释放。图片同名异内容不覆盖。自提版本替换见恢复参考；厂发保留冲突文件，不靠变编号规避。
 
-Execute after reviewing the dry run:
+## 完成报告
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/archive-delivery-notes.ps1 -ManifestPath <batch.csv> -ReportPath <batch-result.csv> -Execute
-```
-
-Never silently overwrite an existing file. Treat an identical hash as already archived. A confirmed newer photograph of the SAME physical note follows the reviewed version-backup/replacement path; do not assign a business suffix just because image bytes differ. A business suffix assigned to distinguish DIFFERENT physical notes is part of the ledger number and must appear identically in both archive destinations. A single note's multiple material rows must retain one identical number.
+分别报告新增单/明细行、已存在跳过、更正、待核实、备份、实际保存工作簿、归档新增/复用、源清理和释放情况。无直接云端或坚果云状态证据时只确认本地保存，不声称上传成功。
