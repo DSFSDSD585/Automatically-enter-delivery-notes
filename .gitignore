@@ -1,0 +1,25 @@
+# Local configuration and real business mappings
+.agents/skills/process-delivery-notes/assets/settings.json
+.agents/skills/process-delivery-notes/references/project-map.csv
+.env
+.env.*
+!.env.example
+# Business documents, runtime reports and backups
+*.xlsx
+*.xls
+*.xlsm
+*.jpg
+*.jpeg
+*.png
+*.pdf
+batch-*/
+runtime/
+backups/
+logs/
+*.journal.jsonl
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.DS_Store
+Thumbs.db

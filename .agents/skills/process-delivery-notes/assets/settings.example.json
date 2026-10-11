@@ -1,0 +1,9 @@
+{
+  "pending_root": "D:/DeliveryNotes/pending",
+  "ledger_root": "D:/DeliveryNotes/ledgers",
+  "primary_archive_root": "D:/DeliveryNotes/processed",
+  "settlement_archive_root": "D:/DeliveryNotes/settlement",
+  "settlement_marker": "已录",
+  "default_year": 2026,
+  "allowed_carriers": ["顾氏", "伟豪", "享运", "顺赢"]
+}

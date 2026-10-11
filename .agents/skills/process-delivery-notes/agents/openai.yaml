@@ -1,0 +1,4 @@
+interface:
+  display_name: "送货单标准处理"
+  short_description: "按编号和项目规则处理台账、保存验证及双目录哈希归档"
+  default_prompt: "Use $process-delivery-notes to process a delivery-note batch with ledger readback, save confirmation, and verified dual archiving."
