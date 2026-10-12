@@ -13,5 +13,7 @@
   ],
   "factory_pending_root": "D:/DeliveryNotes/pending/factory",
   "distribution_ledger": "D:/DeliveryNotes/settlement/distribution-2026.xlsx",
-  "procurement_root": "D:/DeliveryNotes/procurement/2026"
+  "procurement_root": "D:/DeliveryNotes/procurement/2026",
+  "self_pickup_pending_root": "D:/DeliveryNotes/pending/self-pickup",
+  "backup_batch_root": "D:/DeliveryNotes/runtime"
 }

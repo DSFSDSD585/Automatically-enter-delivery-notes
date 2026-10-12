@@ -2,25 +2,16 @@
 import argparse,csv,hashlib,json,re
 from collections import defaultdict
 from pathlib import Path
+from delivery_paths import pending_files, history_rows
 
 def inventory(settings,history_root,mode="self_pickup"):
     history=defaultdict(list)
-    root=Path(history_root)
-    paths=set()
-    for pattern in ('batch-*/*-result.csv','batch-*/*-manifest.csv','*-result.csv','*-manifest.csv'):
-        paths.update(root.glob(pattern))
-    for p in sorted(paths):
-        try:
-            with p.open(encoding='utf-8-sig',newline='') as f:
-                reader=csv.DictReader(f)
-                if not {'delivery_no','source_sha256'}<=set(reader.fieldnames or []):continue
-                for r in reader:
-                    h=r.get('source_sha256','').lower()
-                    if not re.fullmatch('[a-f0-9]{64}',h) or not r.get('delivery_no'):continue
-                    history[h].append({k:r.get(k,'') for k in ('delivery_no','ledger_file','ledger_sheet','ledger_rows','primary_target','settlement_target')}|{'history_file':str(p)})
-        except (UnicodeError,csv.Error):continue
+    for p,r in history_rows(history_root):
+        h=(r.get('source_sha256') or '').lower()
+        if not re.fullmatch('[a-f0-9]{64}',h) or not r.get('delivery_no'):continue
+        history[h].append({k:r.get(k,'') for k in ('delivery_no','ledger_file','ledger_sheet','ledger_rows','primary_target','settlement_target')}|{'history_file':str(p)})
     rows=[];groups=defaultdict(list)
-    files=sorted(p for p in Path(settings['factory_pending_root' if mode=='factory' else 'pending_root']).iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png'))
+    files=pending_files(settings,mode)
     for i,p in enumerate(files,1):
         before=p.stat()
         with p.open('rb') as f:h=hashlib.file_digest(f,'sha256').hexdigest()

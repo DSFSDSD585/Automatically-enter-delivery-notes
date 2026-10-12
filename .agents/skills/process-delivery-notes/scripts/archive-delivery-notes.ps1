@@ -471,9 +471,8 @@ $blockedCount = @($results | Where-Object { $_.Status -eq 'Blocked' }).Count
 $completedCount = @($results | Where-Object { $_.Status -eq 'Completed' }).Count
 $alreadyCompleteCount = @($results | Where-Object { $_.Status -eq 'AlreadyComplete' }).Count
 $readyCount = @($results | Where-Object { $_.Status -eq 'Ready' }).Count
-$pendingCount = if (Test-Path -LiteralPath $pendingRoot -PathType Container) {
-    @(Get-ChildItem -LiteralPath $pendingRoot -File | Where-Object { $_.Extension.ToLowerInvariant() -in @('.jpg', '.jpeg', '.png') }).Count
-} else { 0 }
+. (Join-Path $PSScriptRoot 'pending-images.ps1')
+$pendingCount = @(Get-SelfPickupImages $settings).Count
 Write-Host ("Summary: completed={0}; already_complete={1}; ready={2}; blocked={3}; pending_images={4}" -f $completedCount, $alreadyCompleteCount, $readyCount, $blockedCount, $pendingCount)
 if ($blockedCount -gt 0) {
     Write-Error "$blockedCount item(s) were not completed; pending sources were retained." -ErrorAction Continue

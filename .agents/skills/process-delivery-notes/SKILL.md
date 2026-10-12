@@ -1,6 +1,6 @@
 ---
 name: process-delivery-notes
-description: Process steel delivery notes from Nutstore, enter self-pickup transport ledgers or factory-direct notes, synchronize transport records to the 2026 distribution ledger without duplicates, reconcile purchase and inbound records, verify saves, and archive originals by project and year. Use for delivery batches, backfills, corrections, reconciliation, and interrupted processing.
+description: Process steel delivery notes from Nutstore, enter self-pickup transport ledgers or factory-direct notes, synchronize transport records to the 2026 distribution ledger without duplicates, reconcile purchase and inbound records, verify saves, and archive originals by project and year. Use for delivery batches, backfills, corrections, reconciliation, interrupted processing, and monthly cleanup of processing backups.
 ---
 
 # Process Delivery Notes
@@ -15,12 +15,14 @@ description: Process steel delivery notes from Nutstore, enter self-pickup trans
 | 厂发新单 | [配送录入及同步](references/distribution-workflow.md)。直接匹配入库并录总览，不虚构运输台账或承运商。 |
 | 已有运输记录同步配送 | [配送录入及同步](references/distribution-workflow.md)。按用户年份/范围；全部2026年包括四本运输台账及旧配送账中的2026记录核查。 |
 | 重传、漏归档、重复、更正 | [恢复规则](references/recovery-workflow.md)及对应入口。冲突项待核实，不重复补录。 |
+| 月底清理台账及照片备份 | [备份清理](references/backup-cleanup.md)。沿用已有月末任务，先预检再执行，仅清理证据完整的已完成批次。 |
 
 所有保存操作读取 [保存与释放文件](references/save-close-workflow.md)。自提双归档读取 [CSV清单](references/manifest-schema.md)；厂发使用配送参考中的JSON清单。
 
 ## 共用约束
 
 1. 每批修改前备份将改的工作簿及待处理原单，记录路径、时间、SHA-256并核验；使用独立批次目录，不能覆盖前次备份。
+   备份放在配置的 `backup_batch_root/delivery-batch-YYYYMMDD-HHMMSS/backups`，维护备份清单、逐单进度及完成记录；字段见[备份清理](references/backup-cleanup.md)。普通录入流程不提前执行月底清理。
 2. 完整保留编号前导零、位数及后缀。同一物理单多材料/多入库编号共用编号；不同物理单确实重号才分配`-1/-2`。不同图片哈希不等于新单。不得全局替换O/0、I/1或删零。
 3. 项目和销售公司用已核实对应关系，不靠相似名字/同重量推断。厂发销售简称与自提承运商规则分开。
 4. 保持原行高、列宽、隐藏状态、公式、格式及已有备注；不全表自动适应。必要新行继承适合模板，不改变原行。运输新材料行宋体11磅黑字；更正值红字、本行追加修改内容，不写更正来源。原红底保留可读文字，备注标红。
@@ -35,6 +37,8 @@ description: Process steel delivery notes from Nutstore, enter self-pickup trans
 - `scripts/distribution_checks.py --input <reviewed-snapshot.json> --report <new-plan.json>`：已规范化原单/运输、入库、已有配送的去重、分配、数量及磅差检查。只输出计划，不识图、不写台账、不替代采购复核。格式见配送参考。
 - `scripts/archive-delivery-notes.ps1 -ManifestPath <batch.csv> -ReportPath <new-result.csv>`：自提双归档预检，通过后加`-Execute`。提供当前磁盘工作簿哈希。
 - `scripts/archive_factory_notes.py --manifest <factory.json> --report <new-result.json>`：厂发归档预检，通过后加`--execute`，核验保存后的配送实际行。
+- `scripts/cleanup-delivery-backups.ps1 -ReportPath <new-preview.json>`：月末备份清理预检；按备份清理规则执行时加 `-Execute`。日期模拟 `-AsOf` 只能用于预览。
+- `scripts/run-tests.ps1`：运行全部 Python 回归测试及 PowerShell 归档场景，使用临时数据。
 
 逐工作簿完成写入、保存、磁盘核验和释放。图片同名异内容不覆盖。自提版本替换见恢复参考；厂发保留冲突文件，不靠变编号规避。
 

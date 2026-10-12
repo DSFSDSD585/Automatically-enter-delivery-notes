@@ -23,3 +23,13 @@ __pycache__/
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Additional backup images and batch audit outputs
+*.webp
+*.tif
+*.tiff
+*.bmp
+*.heic
+delivery-batch-*/
+backup-cleanup-reports/
+*.bundle

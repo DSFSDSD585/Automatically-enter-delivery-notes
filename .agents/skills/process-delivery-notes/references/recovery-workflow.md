@@ -30,7 +30,7 @@ The result CSV plus adjacent `.journal.jsonl` form the checkpoint trail. Two has
 
 Unknown project/number and ambiguous duplicate physical notes still require confirmation. PNG is authorized for native dual archiving; preserve its actual format and extension. Blank-plate authorization does not resolve identity conflicts.
 
-Inspect PNG originals and match their full visible numbers against saved rows before reporting a status. The archive script now preserves PNG and checks its signature. If an exact number is absent, re-read the full-size number and compare contextual fields before declaring a numbering conflict; never silently remove a digit or leading zero. Pass the workspace as `--history-dir` to include carrier-specific manifests/results in all prior `batch-*` directories.
+Inspect PNG originals and match their full visible numbers against saved rows before reporting a status. The archive script now preserves PNG and checks its signature. If an exact number is absent, re-read the full-size number and compare contextual fields before declaring a numbering conflict; never silently remove a digit or leading zero. Pass the workspace as `--history-dir` to include direct results and carrier manifests/results in `batch-*` and `delivery-batch-*` directories, including those below `outputs`. Self-pickup discovery includes legacy loose images and the configured `自提` directory; factory images stay separate. History hits remain review candidates.
 
 ## Reporting
 

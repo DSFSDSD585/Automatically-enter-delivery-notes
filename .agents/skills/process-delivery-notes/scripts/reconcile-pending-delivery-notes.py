@@ -4,13 +4,14 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 from openpyxl import load_workbook
+from delivery_paths import pending_files, history_rows
 
 def sha(p):
     with Path(p).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 
 def reconcile(settings,mapping,history_dir):
     pending=Path(settings['pending_root']);ledgerroot=Path(settings['ledger_root'])
-    files=[p for p in pending.iterdir() if p.is_file() and p.suffix.lower() in ('.jpg','.jpeg','.png')]
+    files=pending_files(settings)
     by_name=defaultdict(set);by_hash=defaultdict(set)
     def add(row):
         no=row.get('delivery_no');src=row.get('source_file');h=row.get('source_sha256')
@@ -18,15 +19,7 @@ def reconcile(settings,mapping,history_dir):
         by_name[Path(src).name].add(no)
         if h and re.fullmatch('[a-fA-F0-9]{64}',h):by_hash[h.lower()].add(no)
     for row in mapping:add(row)
-    history_root=Path(history_dir)
-    history_paths=set(history_root.glob('*.csv'))
-    for pattern in ('batch-*/*-result.csv','batch-*/*-manifest.csv'):
-        history_paths.update(history_root.glob(pattern))
-    for p in sorted(history_paths):
-        try:
-            with p.open(encoding='utf-8-sig',newline='') as f:
-                for row in csv.DictReader(f):add(row)
-        except (UnicodeError,csv.Error):continue
+    for _, row in history_rows(history_dir):add(row)
     archives={'primary':defaultdict(list),'settlement':defaultdict(list)}
     for kind,key in [('primary','primary_archive_root'),('settlement','settlement_archive_root')]:
         for p in Path(settings[key]).rglob('*'):

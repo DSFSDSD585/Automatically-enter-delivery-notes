@@ -123,6 +123,12 @@ def plan(data):
     # Reject invalid repeated source IDs globally: do not allow the first copy to proceed.
     if any(e['reason'] == 'missing_or_duplicate_source_line' for e in errors):
         raise ValueError('missing_or_duplicate_source_line')
+    arrivals_by_note = defaultdict(set)
+    existing_arrivals = defaultdict(set)
+    for (note, _), rows in groups.items():
+        arrivals_by_note[note].update(r['arrival_date'] for r in rows)
+    for r in existing:
+        existing_arrivals[text(r['note_no'])].add(r['arrival_date'])
     results, proposals = list(errors), defaultdict(list)
     for (note, k), rows in groups.items():
         result = {'note_no': note, 'line_ids': [r['line_id'] for r in rows], 'status': 'blocked',
@@ -130,10 +136,12 @@ def plan(data):
         results.append(result)
         if any(e.get('note_no') == note for e in errors):
             result['reason'] = 'other_detail_of_same_note_invalid'; continue
-        arrivals = {r['arrival_date'] for r in rows}
+        arrivals = arrivals_by_note[note]
         if len(arrivals) != 1:
             result['reason'] = 'inconsistent_arrival_within_note'; continue
         arrival = next(iter(arrivals)); amount = totals(rows)
+        if existing_arrivals[note] and existing_arrivals[note] != {arrival}:
+            result['reason'] = 'existing_detail_difference_correct_do_not_append'; continue
         detail_signatures = [(r['arrival_date'],*quantities(r)) for r in rows]
         if len(set(detail_signatures)) != len(detail_signatures) and not all(r.get('repeated_detail_reviewed') is True for r in rows):
             result['reason'] = 'possible_duplicate_source_details'; continue
