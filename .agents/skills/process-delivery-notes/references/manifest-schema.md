@@ -1,5 +1,8 @@
 # Batch manifest schema
 
+业务规则唯一来源：[送货单业务逻辑规则](送货单业务逻辑规则.md)。每次执行先按[状态工具接口](processing-state.md)实际读取规则和共享状态。
+
+
 Use one row per source image. Keep the same row through recognition, ledger entry, save confirmation, archiving, and retry.
 
 ## Required input fields

@@ -78,6 +78,10 @@ class Evidence:
     def __init__(self, settings):
         self.settings = settings
         self.root = safe_path(settings['backup_batch_root'])
+        if settings.get('state_root'):
+            state_root = safe_path(settings['state_root'])
+            if state_root == self.root or state_root.is_relative_to(self.root) or self.root.is_relative_to(state_root):
+                raise ValueError('state_root_overlaps_backup_root')
         self.files = {}
         self.cache = {}
         for key in BUSINESS:
@@ -229,6 +233,12 @@ def plan(settings, now=None, only_batch=None):
         try:
             batch = evidence.batch_path(batch)
             _, progress, manifest = evidence.load(batch)
+            if settings.get('state_root'):
+                from delivery_state import cleanup_blockers
+                blockers = cleanup_blockers(settings['state_root'], batch,
+                                            [r.get('note', r.get('delivery_no')) for r in progress])
+                if blockers:
+                    raise ValueError('unresolved_related_issues: '+','.join(blockers))
             backup_root = safe_path(batch/'backups')
             photo_records = [r for r in manifest if Path(r['backup']).suffix.lower() in PHOTOS]
             for row in progress:

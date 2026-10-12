@@ -1,22 +1,85 @@
 {
   "rules": [
-    { "pattern": "^XCLWZ(?!-SY-)", "carrier": "享运", "note": "新材料温州享运编号，排除顺赢显式-SY-编号" },
-    { "pattern": "^XCLWZ-SY-", "carrier": "顺赢", "note": "顺赢新材料-温州台账已有0001至0006连续记录，后续按完整印刷位数保存" },
-    { "pattern": "^XCLFY", "carrier": "享运", "note": "新材料富阳编号" },
-    { "pattern": "^XCLJX-XY-", "carrier": "享运", "note": "新材料嘉兴享运编号" },
-    { "pattern": "^XCLNB-XY-", "carrier": "享运", "note": "新材料宁波享运编号" },
-    { "pattern": "^HCK2-XY-", "carrier": "享运", "note": "杭淳开2标享运编号" },
-    { "pattern": "HCDL", "carrier": "顾氏", "note": "HCDL后续编号" },
-    { "pattern": "-GS-", "carrier": "顾氏", "note": "顾氏显式编号" },
-    { "pattern": "^YJ1B", "carrier": "顾氏", "note": "甬金1标顾氏连续编号" },
-    { "pattern": "SZQX", "carrier": "伟豪", "note": "SZQX后续编号" },
-    { "pattern": "-WH-", "carrier": "伟豪", "note": "伟豪显式编号" },
-    { "pattern": "^DAGS01-WH-", "carrier": "伟豪", "note": "2026-09-18用户确认德安高速1标；最新同名工作表及双项目目录已核实；不沿用旧误识别DAGG01" },
-    { "pattern": "^JHJ100", "carrier": "伟豪", "note": "金华江一期1标连续编号" },
-    { "pattern": "^HZJT", "carrier": "伟豪", "note": "湖州交投如通苏湖8标连续编号" },
-    { "pattern": "^SYJD", "carrier": "伟豪", "note": "绍兴上虞项目连续编号" }
+    {
+      "pattern": "^XCLWZ(?!-SY-)",
+      "carrier": "享运",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^XCLWZ-SY-",
+      "carrier": "顺赢",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^XCLFY",
+      "carrier": "享运",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^XCLJX-XY-",
+      "carrier": "享运",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^XCLNB-XY-",
+      "carrier": "享运",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^HCK2-XY-",
+      "carrier": "享运",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "HCDL",
+      "carrier": "顾氏",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "-GS-",
+      "carrier": "顾氏",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^YJ1B",
+      "carrier": "顾氏",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "SZQX",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "-WH-",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^DAGS01-WH-",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^JHJ100",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^HZJT",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    },
+    {
+      "pattern": "^SYJD",
+      "carrier": "伟豪",
+      "note": "既有承运商检索候选；与当前原单、台账及专项确认共同核对"
+    }
   ],
   "manual_only": [
-    { "carrier": "顺赢", "note": "仅在顺赢台账已形成连续编号规则或用户确认后填写" }
+    {
+      "carrier": "顺赢",
+      "note": "仅在顺赢台账已形成连续编号规则或用户确认后填写"
+    }
   ]
 }

@@ -33,3 +33,19 @@ Thumbs.db
 delivery-batch-*/
 backup-cleanup-reports/
 *.bundle
+
+# Durable business state and local history imports stay outside Git
+delivery-processing-state/
+processing-state/
+.delivery-processing-state/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+history-import*.json
+历史导入清单.json
+最新处理状态.md
+未解决问题清单.md
+状态索引.json
+阶段报告/

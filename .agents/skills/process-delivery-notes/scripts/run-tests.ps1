@@ -7,6 +7,8 @@ if (-not $PythonPath) {
 }
 & $PythonPath -B -m unittest discover -s $PSScriptRoot -p 'test_*.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Python regression checks failed' }
+& $PythonPath -B (Join-Path $PSScriptRoot 'rules_data.py') --check
+if ($LASTEXITCODE -ne 0) { throw 'Business rule appendix and generated mappings differ' }
 $shell = (Get-Process -Id $PID).Path
 & $shell -NoProfile -File (Join-Path $PSScriptRoot 'test-archive-delivery-notes.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Self-pickup archive regression checks failed' }

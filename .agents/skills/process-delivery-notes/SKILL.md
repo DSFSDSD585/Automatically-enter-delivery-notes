@@ -5,43 +5,35 @@ description: Process steel delivery notes from Nutstore, enter self-pickup trans
 
 # Process Delivery Notes
 
-按单据类型选择流程；以保存后重新读取的实际内容为完成依据。先备份，先查重，逐项留存进度，重试只补未完成步骤。技能更新或测试不等于授权处理正式业务文件。
+## 每次开始与恢复：必须实际读取
 
-## 流程入口
+1. 读取 [送货单业务逻辑规则](references/送货单业务逻辑规则.md) 全文；这是唯一业务规则及映射维护入口。运行 `scripts/rules_data.py --check` 确认派生映射一致，失败时先修复派生文件再继续。
+2. 按 [状态工具接口](references/processing-state.md) 调用 read-context、逐页 read-page，读取最新实际处理、全部未解决问题及本次单据专项历史。不能只看摘要；被截断的输出必须重读。
+3. begin取得run；对照本次实际文件再继续。正式写入、归档和清理前guard；每个验证阶段record，中断也finish。状态不明先核文件。
 
-| 请求 | 必读及范围 |
+## 按任务读取技术参考
+
+|任务|技术参考|
 |---|---|
-| 自提新单 | [运输规则](references/workflow-rules.md)、[项目映射](references/project-map.csv)、[承运商规则](references/carrier-rules.json)。运输台账保存核验后接配送同步。 |
-| 厂发新单 | [配送录入及同步](references/distribution-workflow.md)。直接匹配入库并录总览，不虚构运输台账或承运商。 |
-| 已有运输记录同步配送 | [配送录入及同步](references/distribution-workflow.md)。按用户年份/范围；全部2026年包括四本运输台账及旧配送账中的2026记录核查。 |
-| 重传、漏归档、重复、更正 | [恢复规则](references/recovery-workflow.md)及对应入口。冲突项待核实，不重复补录。 |
-| 月底清理台账及照片备份 | [备份清理](references/backup-cleanup.md)。沿用已有月末任务，先预检再执行，仅清理证据完整的已完成批次。 |
+|自提新单|[运输操作](references/workflow-rules.md)，运输保存核验后接配送同步|
+|厂发新单、历史运输同步配送|[配送工具及列接口](references/distribution-workflow.md)|
+|重传、版本、漏归档及恢复|[恢复工具](references/recovery-workflow.md)|
+|保存及释放|[保存操作](references/save-close-workflow.md)|
+|自提归档清单|[CSV字段](references/manifest-schema.md)|
+|月底备份清理|[清理接口](references/backup-cleanup.md)，沿用现有任务；实际执行带-RunId|
 
-所有保存操作读取 [保存与释放文件](references/save-close-workflow.md)。自提双归档读取 [CSV清单](references/manifest-schema.md)；厂发使用配送参考中的JSON清单。
+业务规则已集中，参考文件仅维护工具接口与操作。项目/承运商映射由规则附表生成：`scripts/rules_data.py --check`。不能手改派生映射。
 
-## 共用约束
+## 工具
 
-1. 每批修改前备份将改的工作簿及待处理原单，记录路径、时间、SHA-256并核验；使用独立批次目录，不能覆盖前次备份。
-   备份放在配置的 `backup_batch_root/delivery-batch-YYYYMMDD-HHMMSS/backups`，维护备份清单、逐单进度及完成记录；字段见[备份清理](references/backup-cleanup.md)。普通录入流程不提前执行月底清理。
-2. 完整保留编号前导零、位数及后缀。同一物理单多材料/多入库编号共用编号；不同物理单确实重号才分配`-1/-2`。不同图片哈希不等于新单。不得全局替换O/0、I/1或删零。
-3. 项目和销售公司用已核实对应关系，不靠相似名字/同重量推断。厂发销售简称与自提承运商规则分开。
-4. 保持原行高、列宽、隐藏状态、公式、格式及已有备注；不全表自动适应。必要新行继承适合模板，不改变原行。运输新材料行宋体11磅黑字；更正值红字、本行追加修改内容，不写更正来源。原红底保留可读文字，备注标红。
-5. 写前重读原值并比较文件哈希，若用户/同步客户端已改文件，重新核对。写后核验关联计算，保存后从磁盘重读。命令成功或修改时间变化不等于完成。
-6. 原图按实际到货年份存对应项目。自提运输和配送双归档；厂发配送归档加处理前备份。缺项目映射先核实；已确认项目下缺年份目录可以创建，不能退回项目根目录。
-7. 记录`recognized → matched → written → disk_verified → archived → cleaned`及每步行号/哈希。重试仅补缺步骤。同步历史运输记录不删除或搬动原归档。
-8. 空车牌允许，其他缺日期/身份/数量字段仍待核；用户说待核实的保持待核。退货、取消、合计和占位号不算新配送。
+- `scripts/delivery_state.py`：启动真实读取、阶段记录、问题状态、恢复及可阅读报告。
+- `scripts/inventory-pending.py --history-root <workspace> --report <batch>/inventory.json`；厂发加`--mode factory`。
+- `scripts/distribution_checks.py --input <规范化快照.json> --report <计划.json>`：只生成检查计划。
+- `scripts/archive-delivery-notes.ps1 -ManifestPath <csv> -ReportPath <新路径>`：自提双归档预检，通过后-Execute。
+- `scripts/archive_factory_notes.py --manifest <json> --report <新路径>`：厂发预检，通过后--execute。
+- `scripts/cleanup-delivery-backups.ps1 -ReportPath <新路径>`：清理预检；按规则正式执行加-Execute -RunId。
+- `scripts/run-tests.ps1`：模拟数据回归及映射一致性。
 
-## 工具及边界
+## 报告
 
-- `scripts/inventory-pending.py --history-root <workspace> --report <new-batch>/inventory.json`：自提稳定清单；厂发加`--mode factory`。历史命中只是候选。
-- `scripts/distribution_checks.py --input <reviewed-snapshot.json> --report <new-plan.json>`：已规范化原单/运输、入库、已有配送的去重、分配、数量及磅差检查。只输出计划，不识图、不写台账、不替代采购复核。格式见配送参考。
-- `scripts/archive-delivery-notes.ps1 -ManifestPath <batch.csv> -ReportPath <new-result.csv>`：自提双归档预检，通过后加`-Execute`。提供当前磁盘工作簿哈希。
-- `scripts/archive_factory_notes.py --manifest <factory.json> --report <new-result.json>`：厂发归档预检，通过后加`--execute`，核验保存后的配送实际行。
-- `scripts/cleanup-delivery-backups.ps1 -ReportPath <new-preview.json>`：月末备份清理预检；按备份清理规则执行时加 `-Execute`。日期模拟 `-AsOf` 只能用于预览。
-- `scripts/run-tests.ps1`：运行全部 Python 回归测试及 PowerShell 归档场景，使用临时数据。
-
-逐工作簿完成写入、保存、磁盘核验和释放。图片同名异内容不覆盖。自提版本替换见恢复参考；厂发保留冲突文件，不靠变编号规避。
-
-## 完成报告
-
-分别报告新增单/明细行、已存在跳过、更正、待核实、备份、实际保存工作簿、归档新增/复用、源清理和释放情况。无直接云端或坚果云状态证据时只确认本地保存，不声称上传成功。
+分别报告新增单/明细、更正、已存在、待核问题、磁盘保存、两处归档、源清理、释放及云同步的实际证据。维护阶段状态，不把照片归档当配送已录。技能更新/测试/历史导入不等于业务文件修改授权。

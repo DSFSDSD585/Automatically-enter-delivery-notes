@@ -4,6 +4,7 @@ param(
     [string]$SettingsPath = (Join-Path $PSScriptRoot '..\assets\settings.json'),
     [string]$PythonPath,
     [string]$AsOf,
+    [string]$RunId,
     [switch]$Execute
 )
 $ErrorActionPreference = 'Stop'
@@ -67,6 +68,12 @@ if ($AsOf) { $arguments += @('--as-of',$AsOf) }
 & $PythonPath @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Backup preflight failed; nothing deleted' }
 if (-not $Execute) { return }
+$stateSettings = Get-Content -LiteralPath $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($stateSettings.state_root) {
+    if (-not $RunId) { throw 'RunId with complete rules/state read is required for execution.' }
+    & $PythonPath -B (Join-Path $PSScriptRoot 'delivery_state.py') --state-dir $stateSettings.state_root guard --run $RunId
+    if ($LASTEXITCODE -ne 0) { throw 'Rules/state startup verification failed.' }
+}
 $plan = Get-Content -LiteralPath $ReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($plan.simulation) { throw 'Simulation cannot execute' }
 $root = [IO.Path]::GetFullPath([string]$plan.backup_batch_root)
@@ -93,6 +100,13 @@ try {
                 $match = @($fresh.batches[0].files | Where-Object { $_.path -eq $entry.path -and $_.sha256 -eq $entry.sha256 -and $_.status -eq 'eligible' })
                 if ($match.Count -ne 1) { throw 'Candidate changed since preflight' }
                 Assert-Evidence $fresh
+                if ($stateSettings.state_root) {
+                    & $PythonPath -B (Join-Path $PSScriptRoot 'delivery_state.py') --state-dir $stateSettings.state_root guard --run $RunId
+                    if ($LASTEXITCODE -ne 0) { throw 'Rules/state changed before deletion.' }
+                    $progressNotes = @(Get-Content -LiteralPath (Join-Path $batch.batch 'progress.json') -Raw -Encoding UTF8 | ConvertFrom-Json | ForEach-Object { if ($_.note) { $_.note } else { $_.delivery_no } })
+                    & $PythonPath -B (Join-Path $PSScriptRoot 'delivery_state.py') --state-dir $stateSettings.state_root cleanup-check --batch $batch.batch --notes @progressNotes
+                    if ($LASTEXITCODE -ne 0) { throw 'Unresolved issues or state failure; backup retained.' }
+                }
                 $path = Assert-BackupPath $entry $batch.batch $root
                 $stream = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Delete))
                 try {

@@ -1,5 +1,8 @@
 # Target-ledger save, verification and release workflow
 
+业务规则唯一来源：[送货单业务逻辑规则](送货单业务逻辑规则.md)。每次执行先按[状态工具接口](processing-state.md)实际读取规则和共享状态。
+
+
 Use this workflow only for transport or distribution ledgers explicitly selected during delivery-note processing. It records the user's standing authorization to save and close that target workbook without asking again for each batch. It does not authorize closing unrelated workbooks or accepting conflict, overwrite, authentication, recovery, or security prompts.
 
 
