@@ -1,4 +1,4 @@
 interface:
   display_name: "送货单标准处理"
-  short_description: "处理自提及厂发送货单、采购核对、配送去重同步和保存归档验证"
-  default_prompt: "Use $process-delivery-notes to process factory or self-pickup notes, reconcile purchase records, sync the distribution ledger without duplicates, and verify saves and project/year archives."
+  short_description: "自提先录运输、保存两处原单再同步年度配送；厂发直录年度配送并归档"
+  default_prompt: "Use $process-delivery-notes to read previous processing results, enter self-pickup notes into transport ledgers, archive their images in both folders, then sync transport data to the corresponding year's distribution ledger; enter factory notes directly into that year's distribution ledger and archive them."

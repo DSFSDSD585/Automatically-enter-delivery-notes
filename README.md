@@ -1,11 +1,15 @@
 # Automatically enter delivery Notes
 
-钢材送货单处理技能，覆盖自提运输台账、厂发直接录入配送台账，以及四本运输台账向2026配送台账同步。
+钢材送货单处理技能，覆盖自提运输台账、厂发直接录入配送台账，以及四本运输台账向实际到货年份配送台账同步。
 
 流程入口为 [.agents/skills/process-delivery-notes/SKILL.md](.agents/skills/process-delivery-notes/SKILL.md)，简要功能见 [功能说明.txt](功能说明.txt)。图片识别、采购证据核对和工作簿写入由Codex配合可用工具完成；脚本提供只读匹配检查及归档，不是独立的一键OCR应用。
 
 ## 本次迭代
 
+- 同步至2026-10-15.1公共规则：自提依次保存运输台账、两处照片，再同步年度配送；厂发直接录年度配送并归档。
+- 已录入并备注、归档核验通过后清理待处理副本，独立未解决问题继续保留；用户明确暂缓的单据保留。
+- 入库红色问题标注结合备注、采购及历史逐项核对；增加已确认格式的五位流水号规范、采购项目区分、共用采购方法及热轧带肋钢筋重量偏差核对规则。
+- 用`read-results`读取不重复的处理结果，`read-status`恢复页进度，按事件或专项决定展开证据；保留`read-context`兼容入口。
 - 将检索、采购核对、磅差、录入、更正、格式保护、归档与清理规则统一到《送货单业务逻辑规则》，参考文件只维护操作接口。
 - 增加独立SQLite处理状态、持续问题清单、阶段报告与专项确认；按对象、明细、检查事项分别记录，历史导入与实际复核分开。
 - 开始和恢复时实际读取完整规则、最新处理、全部未解决问题及本次单据历史；规则或共享状态变化时重新核对。
@@ -20,7 +24,7 @@ Windows、PowerShell、Python 3.12或以上。只读旧Excel扫描依赖`openpyx
 2. 将技能内`assets/settings.example.json`复制为`assets/settings.json`，填写本机路径；其中`state_root`必须为独立的绝对路径，不能与`backup_batch_root`相互包含。
 3. 在本地部署的[业务规则附表](.agents/skills/process-delivery-notes/references/送货单业务逻辑规则.md)维护已确认映射，再运行`python .agents/skills/process-delivery-notes/scripts/rules_data.py --write`。CSV及JSON均为派生文件，不单独修改。发布版只有待确认的示例项目；真实附表与派生映射只留本地，上传时使用脱敏版本。
 4. 首次用`delivery_state.py init`初始化独立状态目录，按[状态接口](.agents/skills/process-delivery-notes/references/processing-state.md)导入已核实的历史记录。已有状态库异常时先恢复，不能新建空库代替。所有命令读取同一settings.state_root，或显式传`--state-dir`。
-5. 每次处理先`read-context`、逐页`read-page`、再`begin`；实际读完全部输出才继续。每阶段`record`，结束或中断`finish`。历史导入不会挤掉最新实际处理，也不能把照片归档当成配送完成。
+5. 每次处理先读完整业务规则，再`read-results`、逐页`read-page`、再`begin`；实际读完结果才继续。`read-status`查看已读页，`read-event`或`read-decision`展开相关依据。每阶段`record`，结束或中断`finish`。历史导入不会挤掉最新实际处理，也不能把照片归档当成配送完成。
 6. 在Codex中使用`$process-delivery-notes`，明确厂发/自提/历史同步范围。批次资料保存到配置的`backup_batch_root/delivery-batch-YYYYMMDD-HHMMSS`，备份放在其`backups`子目录。
 
 ## 入口命令
@@ -58,7 +62,7 @@ JSON格式与匹配规则见 [配送录入及同步](.agents/skills/process-deli
 
 ## 回归测试
 
-测试仅使用临时目录中的合成数据。统一入口包括 105 项 Python 检查（含历史盘点和版本恢复）及 15 个 PowerShell 归档场景。
+测试仅使用临时目录中的合成数据。统一入口包含 Python 检查（处理结果及证据读取、历史盘点、版本恢复等）及 PowerShell 归档场景。
 
 ```powershell
 & .agents/skills/process-delivery-notes/scripts/run-tests.ps1

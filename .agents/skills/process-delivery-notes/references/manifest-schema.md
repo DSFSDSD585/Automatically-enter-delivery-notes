@@ -5,6 +5,8 @@
 
 Use one row per source image. Keep the same row through recognition, ledger entry, save confirmation, archiving, and retry.
 
+本CSV用于自提顺序中的“运输台账保存→文件1对应项目/运输单位→文件2对应项目/年份”阶段。两处图片保存后，另从已保存运输台账同步数据到对应年份配送台账。这里的 `ledger_file`、`ledger_saved` 和 `archive_status` 不能证明配送数据已录。文件1为项目/运输单位层级，文件2为项目/实际到货年份层级。
+
 ## Required input fields
 
 | Field | Required value before archive |
@@ -47,4 +49,4 @@ Before archive execution, verify that every detail row for the physical note has
 
 Use `-ReportPath` for every dry run and execution, distinct from the input manifest. The CSV and adjacent `.journal.jsonl` are the resumable audit trail; do not edit hash fields manually. `existing` requires a new photo-to-disk-row review and workbook hash, not a stale saved flag.
 
-`offline`表示已授权的离线修改、保存及磁盘逐格核验；没有打开工作簿时close_status=not_attempted、close_method=none，close_error说明离线保存且句柄已释放，不伪造Excel已关闭。自提归档年份取arrival_date年份；已确认项目下允许创建缺失年份目录，不再退回项目根目录。厂发使用独立JSON归档脚本。
+`offline`表示已授权的离线修改、保存及磁盘逐格核验；没有打开工作簿时close_status=not_attempted、close_method=none，close_error说明离线保存且句柄已释放，不伪造Excel已关闭。文件2归档年份取arrival_date年份；已确认项目下允许创建缺失年份目录，不再退回项目根目录。厂发在对应年份配送台账保存后使用独立JSON归档脚本。

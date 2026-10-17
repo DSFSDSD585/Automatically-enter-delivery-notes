@@ -150,7 +150,7 @@ class State:
                     raise ValueError('context_missing_or_changed_read_again')
                 count = self.db.execute('SELECT COUNT(*) FROM receipt_pages WHERE receipt_id=? AND shown_at IS NOT NULL', (receipt,)).fetchone()[0]
                 if count != r['page_count'] or digest(r['rules_path']) != r['rules_sha256']:
-                    raise ValueError('rules_not_fully_read_or_changed')
+                    raise ValueError('results_not_fully_read_or_rules_changed')
             run = 'RUN-' + uuid.uuid4().hex
             self.db.execute('INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?)',
                             (run, kind, now(), None, 'running', dump(scope),
@@ -171,12 +171,12 @@ class State:
     def require_run(self, run, rules=RULES):
         r = self.db.execute('SELECT * FROM runs WHERE id=?', (run,)).fetchone()
         if not r or r['kind'] != 'processing' or r['status'] != 'running' or not r['read_at']:
-            raise ValueError('active_processing_run_with_full_read_required')
+            raise ValueError('active_processing_run_with_results_read_required')
         if digest(rules) != r['rules_sha256']:
-            raise ValueError('rules_changed_read_context_and_start_new_run')
+            raise ValueError('rules_changed_read_results_and_start_new_run')
         own = self.db.execute('SELECT COUNT(*) FROM events WHERE run_id=?', (run,)).fetchone()[0]
         if self.revision() != r['context_revision'] + own:
-            raise ValueError('shared_state_changed_read_context_again')
+            raise ValueError('shared_state_changed_read_results_again')
         return r
 
     def record(self, run, value, rules=RULES):
@@ -302,31 +302,109 @@ class State:
                 'latest_history_import': dict(last_history) if last_history else None,
                 'open_issues': self.open_issues(), 'scoped_history': relevant, 'decisions': decisions}
 
+    def results(self, notes=()):
+        """Business outcomes, with full evidence available separately by event ID.
+
+        This is a view only: no event, issue, decision or source evidence is changed.
+        Repeated membership in latest/open/scoped lists does not repeat an event.
+        """
+        context = self.context(notes)
+        result_run = context['latest_processing']
+        latest_events = context['latest_processing_events']
+        if not latest_events:
+            previous = self.db.execute('''SELECT r.* FROM runs r
+                WHERE r.kind='processing' AND EXISTS(SELECT 1 FROM events e WHERE e.run_id=r.id)
+                ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1''').fetchone()
+            result_run = dict(previous) if previous else None
+            latest_events = [dict(r) for r in self.db.execute(
+                'SELECT * FROM events WHERE run_id=? ORDER BY seq', (previous['id'],))] if previous else []
+
+        events = {}
+        def add(row):
+            seq = row.get('seq', row.get('latest_seq'))
+            if seq not in events:
+                data = json.loads(row['data'])
+                item = {'event_seq': seq}
+                for key in ('object', 'stage', 'check', 'status', 'result', 'action', 'next', 'transition'):
+                    if key in data:
+                        item[key] = data[key]
+                for key in ('checked_at', 'recorded_at', 'imported_at'):
+                    item[key] = row.get(key)
+                item['source_kind'] = 'historical_import' if row.get('imported_at') else 'actual_check'
+                item['evidence_count'] = len(data.get('evidence', []))
+                events[seq] = item
+            return seq
+
+        latest_refs = [add(r) for r in latest_events]
+        open_refs = [{'issue_id': r['id'], 'status': r['status'], 'event_seq': add(r)}
+                     for r in context['open_issues']]
+        scoped_refs = [add(r) for r in context['scoped_history']]
+        decisions = [{'id': r['id'], 'object': json.loads(r['object_json']),
+                      'instruction': r['instruction'], 'decided_at': r['decided_at'],
+                      'recorded_at': r['recorded_at'], 'evidence_count': len(json.loads(r['evidence']))}
+                     for r in context['decisions']]
+        return {'latest_processing': context['latest_processing'],
+                'processing_with_results': result_run,
+                'latest_result_events': latest_refs,
+                'latest_history_import': context['latest_history_import'],
+                'open_issue_count': len(open_refs), 'open_issues': open_refs,
+                'scoped_history_events': scoped_refs, 'decisions': decisions,
+                'events': [events[k] for k in sorted(events)],
+                'details': 'read-event --seq <event_seq> 或 read-decision --id <id>；证据保留原库，按相关事项展开。'}
+
     def prepare_read(self, rules=RULES, notes=(), page_chars=10000):
         if page_chars < 100 or page_chars > 20000:
             raise ValueError('page_chars_out_of_range')
-        content = Path(rules).read_text(encoding='utf-8-sig')
         rules_hash = digest(rules)
         with self.transaction():
-            context = self.context(notes)
-            # Read every actual status field and evidence reference, without copying
-            # entire archived source datasets again into each issue's startup text.
-            for collection in ('latest_processing_events','open_issues','scoped_history'):
-                compact=[]
-                for row in context[collection]:
-                    item={k:row.get(k) for k in ('id','issue_id','seq','status','checked_at','recorded_at','imported_at') if row.get(k) is not None}
-                    data=json.loads(row['data'])
-                    data.pop('original_record',None)
-                    item.update(data);compact.append(item)
-                context[collection]=compact
-            body = '【业务规则全文】\n' + content + '\n【最新实际处理、全部未解决问题及专项历史】\n' + json.dumps(context, ensure_ascii=False, indent=2)
+            results = self.results(notes)
+            body = '【上次处理结果、未解决问题清单及本次单据相关结果】\n' + json.dumps(results, ensure_ascii=False, indent=2)
             pages = [body[i:i+page_chars] for i in range(0, len(body), page_chars)]
             receipt = 'READ-' + uuid.uuid4().hex
             self.db.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?)',
                             (receipt, now(), str(Path(rules).resolve()), rules_hash, self.revision(), len(pages), dump(list(notes))))
             self.db.executemany('INSERT INTO receipt_pages VALUES(?,?,?,NULL)', [(receipt, i+1, p) for i,p in enumerate(pages)])
         return {'receipt': receipt, 'pages': len(pages), 'characters': len(body), 'rules_sha256': rules_hash,
-                'instruction': '逐页调用 read-page，实际读完全部输出后再 begin；仅生成此清单不算读取。'}
+                'instruction': '先读业务规则；逐页 read-page 阅读处理结果后 begin。read-status 可恢复页进度，具体证据按相关事项 read-event/read-decision。'}
+
+    def read_status(self, receipt):
+        r = self.db.execute('SELECT * FROM receipts WHERE id=?', (receipt,)).fetchone()
+        if not r:
+            raise ValueError('unknown_read_receipt')
+        rows = self.db.execute('SELECT page,shown_at FROM receipt_pages WHERE receipt_id=? ORDER BY page', (receipt,)).fetchall()
+        consumed = self.db.execute('SELECT value FROM meta WHERE key=?', ('receipt_consumed:'+receipt,)).fetchone()
+        return {'receipt': receipt, 'pages': r['page_count'],
+                'shown_pages': [row['page'] for row in rows if row['shown_at']],
+                'unshown_pages': [row['page'] for row in rows if not row['shown_at']],
+                'rules_unchanged': Path(r['rules_path']).is_file() and digest(r['rules_path']) == r['rules_sha256'],
+                'state_unchanged': self.revision() == r['context_revision'],
+                'consumed_by': consumed['value'] if consumed else None}
+
+    @staticmethod
+    def detail_page(value, page, page_chars):
+        if page_chars < 100 or page_chars > 20000:
+            raise ValueError('page_chars_out_of_range')
+        body = json.dumps(value, ensure_ascii=False, indent=2)
+        pages = [body[i:i+page_chars] for i in range(0, len(body), page_chars)]
+        if page < 1 or page > len(pages):
+            raise ValueError('unknown_detail_page')
+        return {'page': page, 'pages': len(pages), 'characters': len(body), 'body': pages[page-1]}
+
+    def event_page(self, seq, page=1, page_chars=10000):
+        r = self.db.execute('SELECT * FROM events WHERE seq=?', (seq,)).fetchone()
+        if not r:
+            raise ValueError('unknown_event')
+        value = {k: r[k] for k in ('seq', 'run_id', 'issue_id', 'source_kind', 'checked_at', 'recorded_at', 'imported_at')}
+        value['data'] = json.loads(r['data'])
+        return self.detail_page(value, page, page_chars)
+
+    def decision_page(self, decision_id, page=1, page_chars=10000):
+        r = self.db.execute('SELECT * FROM decisions WHERE id=?', (decision_id,)).fetchone()
+        if not r:
+            raise ValueError('unknown_decision')
+        value = {k: r[k] for k in ('id', 'instruction', 'decided_at', 'recorded_at')}
+        value.update(object=json.loads(r['object_json']), evidence=json.loads(r['evidence']))
+        return self.detail_page(value, page, page_chars)
 
     def page(self, receipt, page):
         r = self.db.execute('SELECT body FROM receipt_pages WHERE receipt_id=? AND page=?', (receipt, page)).fetchone()
@@ -406,8 +484,11 @@ def main():
     p.add_argument('--rules', default=str(RULES))
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('init')
-    q = sub.add_parser('read-context'); q.add_argument('--notes', nargs='*', default=[]); q.add_argument('--page-chars', type=int, default=10000)
+    q = sub.add_parser('read-results', aliases=['read-context']); q.add_argument('--notes', nargs='*', default=[]); q.add_argument('--page-chars', type=int, default=10000)
     q = sub.add_parser('read-page'); q.add_argument('--receipt', required=True); q.add_argument('--page', required=True, type=int)
+    q = sub.add_parser('read-status'); q.add_argument('--receipt', required=True)
+    q = sub.add_parser('read-event'); q.add_argument('--seq', required=True, type=int); q.add_argument('--page', type=int, default=1); q.add_argument('--page-chars', type=int, default=10000)
+    q = sub.add_parser('read-decision'); q.add_argument('--id', required=True); q.add_argument('--page', type=int, default=1); q.add_argument('--page-chars', type=int, default=10000)
     q = sub.add_parser('begin'); q.add_argument('--receipt', required=True); q.add_argument('--scope', required=True)
     q = sub.add_parser('record'); q.add_argument('--run', required=True); q.add_argument('--input', required=True)
     q = sub.add_parser('finish'); q.add_argument('--run', required=True); q.add_argument('--status', choices=['completed','interrupted','failed'], required=True)
@@ -418,10 +499,16 @@ def main():
     s = State(a.state_dir, create=a.command=='init')
     try:
         result = None
-        if a.command == 'read-context': result = s.prepare_read(a.rules, a.notes, a.page_chars)
+        if a.command in ('read-results', 'read-context'): result = s.prepare_read(a.rules, a.notes, a.page_chars)
         elif a.command == 'read-page':
             print(s.page(a.receipt, a.page), flush=True)
             s.mark_shown(a.receipt, a.page)
+            return
+        elif a.command == 'read-status': result = s.read_status(a.receipt)
+        elif a.command in ('read-event', 'read-decision'):
+            detail = s.event_page(a.seq, a.page, a.page_chars) if a.command == 'read-event' else s.decision_page(a.id, a.page, a.page_chars)
+            print(json.dumps({k:v for k,v in detail.items() if k != 'body'}, ensure_ascii=False), flush=True)
+            print(detail['body'], flush=True)
             return
         elif a.command == 'begin': result = {'run':s.begin('processing', a.scope, a.receipt)}
         elif a.command == 'record':

@@ -29,13 +29,84 @@ class StateTests(unittest.TestCase):
                     action='核对，未修改',next='核对原单',verified=True,
                     evidence=[{'path':str(self.proof),'sha256':digest(self.proof),'kind':'workbook_disk_read','observation':'读取Q3及对应原单'}])
 
-    def test_full_content_and_all_pages_required(self):
+    def test_result_pages_required_and_rules_version_still_checked(self):
         c=self.s.prepare_read(self.rules,page_chars=200)
         with self.assertRaisesRegex(ValueError,'not_fully_read'):self.s.begin('processing','x',c['receipt'])
         parts=[]
         for n in range(1,c['pages']+1):parts.append(self.s.page(c['receipt'],n));self.s.mark_shown(c['receipt'],n)
-        self.assertIn(self.rules.read_text(encoding='utf-8'),''.join(parts))
+        self.assertIn('上次处理结果',''.join(parts))
+        self.assertNotIn(self.rules.read_text(encoding='utf-8'),''.join(parts))
+        self.assertEqual(c['rules_sha256'],digest(self.rules))
         self.s.begin('processing','x',c['receipt'])
+
+    def test_results_keep_outcomes_without_repeating_evidence(self):
+        run=self.start();v=self.event();v['original_record']={'large':'原始记录'*5000}
+        v['evidence'][0]['historical_attachment']='历史证据'*5000
+        seq=self.s.record(run,v,self.rules)
+        before=[tuple(r) for r in self.s.db.execute('SELECT * FROM issues')]
+        result=self.s.results(['P-N-0001'])
+        self.assertEqual(result['latest_result_events'],[seq])
+        self.assertEqual(result['scoped_history_events'],[seq])
+        self.assertEqual(result['open_issue_count'],1)
+        self.assertEqual(result['open_issues'][0]['event_seq'],seq)
+        self.assertEqual(len(result['events']),1)
+        event=result['events'][0]
+        for field in ('object','stage','check','status','result','action','next'):
+            self.assertEqual(event[field],v[field])
+        self.assertNotIn('历史证据',json.dumps(result,ensure_ascii=False))
+        self.assertNotIn('原始记录',json.dumps(result,ensure_ascii=False))
+        detail=self.s.event_page(seq,page_chars=1000)
+        body=''.join(self.s.event_page(seq,n,1000)['body'] for n in range(1,detail['pages']+1))
+        saved=json.loads(body)['data']
+        self.assertEqual(saved['original_record'],v['original_record'])
+        self.assertEqual(saved['evidence'],v['evidence'])
+        self.assertEqual([tuple(r) for r in self.s.db.execute('SELECT * FROM issues')],before)
+
+    def test_empty_new_run_does_not_hide_previous_results(self):
+        previous=self.start();seq=self.s.record(previous,self.event(),self.rules)
+        self.s.finish(previous,'interrupted')
+        current=self.start();result=self.s.results()
+        self.assertEqual(result['latest_processing']['id'],current)
+        self.assertEqual(result['processing_with_results']['id'],previous)
+        self.assertEqual(result['latest_result_events'],[seq])
+
+    def test_scoped_resolutions_and_decisions_remain_readable(self):
+        run=self.start();old=self.s.record(run,self.event(),self.rules)
+        resolved=self.s.record(run,self.event('resolved','resolved'),self.rules)
+        self.s.finish(run,'completed')
+        decision=self.s.decision({'note':'P-N-0001','scope':'仅此单'},'按用户指定保留旧版',[{'text':'完整原始决定依据'}])
+        run=self.start();v=self.event('unrelated');v['object']['key']='OTHER';v['object']['note']='OTHER'
+        unrelated=self.s.record(run,v,self.rules)
+        result=self.s.results(['P-N-0001'])
+        self.assertEqual(result['scoped_history_events'],[old,resolved])
+        self.assertEqual(result['open_issue_count'],1)
+        self.assertEqual(result['open_issues'][0]['event_seq'],unrelated)
+        self.assertEqual(result['decisions'][0]['instruction'],'按用户指定保留旧版')
+        detail=json.loads(self.s.decision_page(decision)['body'])
+        self.assertEqual(detail['evidence'],[{'text':'完整原始决定依据'}])
+
+    def test_read_progress_survives_reopening_and_reports_changes(self):
+        c=self.s.prepare_read(self.rules,page_chars=100)
+        self.s.page(c['receipt'],1);self.s.mark_shown(c['receipt'],1)
+        with self.assertRaisesRegex(ValueError,'not_fully_read'):
+            self.s.begin('processing','incomplete',c['receipt'])
+        self.s.close();self.s=State(self.root/'state')
+        progress=self.s.read_status(c['receipt'])
+        self.assertEqual(progress['shown_pages'],[1])
+        self.assertEqual(progress['unshown_pages'],list(range(2,c['pages']+1)))
+        self.assertTrue(progress['rules_unchanged']);self.assertTrue(progress['state_unchanged'])
+        self.s.decision({'note':'N','scope':'单据'},'用户新指示',[{'text':'指示依据'}])
+        self.assertFalse(self.s.read_status(c['receipt'])['state_unchanged'])
+        self.rules.write_text('changed',encoding='utf-8')
+        self.assertFalse(self.s.read_status(c['receipt'])['rules_unchanged'])
+
+    def test_result_details_reject_unknown_or_out_of_range_page(self):
+        run=self.start();seq=self.s.record(run,self.event(),self.rules)
+        with self.assertRaisesRegex(ValueError,'unknown_detail_page'):self.s.event_page(seq,0)
+        with self.assertRaisesRegex(ValueError,'unknown_detail_page'):self.s.event_page(seq,999)
+        with self.assertRaisesRegex(ValueError,'unknown_event'):self.s.event_page(999)
+        with self.assertRaisesRegex(ValueError,'unknown_decision'):self.s.decision_page('missing')
+        with self.assertRaisesRegex(ValueError,'unknown_read_receipt'):self.s.read_status('missing')
 
     def test_rule_change_invalidates_receipt(self):
         run=self.start();self.rules.write_text('changed',encoding='utf-8')
